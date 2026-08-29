@@ -30,6 +30,11 @@ endif
 if host_system == 'windows'
     bz2 = dependency('bzip2', static: build_static)
     iconv = compilers['cpp'].find_library('iconv', static: build_static)
+elif host_system == 'vita'
+    bz2 = compilers['cpp'].find_library('bz2')
+    # newlib ships iconv inside libc on the Vita; there is no separate
+    # libiconv/libcharset to link.
+    iconv = dependency('', required: false)
 else
     bz2 = compilers['cpp'].find_library('bz2')
     # FIXME: Specifically asking for static doesn't work if iconv isn't

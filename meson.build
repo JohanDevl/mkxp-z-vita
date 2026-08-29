@@ -68,6 +68,14 @@ gfx_backend = get_option('gfx_backend')
 if gfx_backend == 'gles'
     # Needs to be manually set up for now
     global_args += '-DGLES2_HEADER'
+    if host_system == 'vita'
+        # GLES2 on the Vita is provided at runtime by the PVR_PSP2 (Piglet)
+        # driver through the pib wrapper; SDL2 must be built with
+        # SDL_VIDEO_VITA_PIB (see platform/vita/build-deps.sh).
+        foreach l : ['pib', 'libScePiglet_stub', 'SceShaccCg_stub', 'taihen_stub']
+            global_dependencies += compilers['cpp'].find_library(l)
+        endforeach
+    endif
 elif gfx_backend == 'gl'
     global_dependencies += dependency('gl')
     # boop
@@ -129,6 +137,9 @@ if host_system == 'windows'
     subdir('windows')
     global_sources += windows_resources
     global_include_dirs += include_directories('windows')
+elif host_system == 'vita'
+    # No desktop install scripts; VPK packaging lives in platform/vita,
+    # entered after the executable target is defined below.
 else
     subdir('linux')
     rpath = '$ORIGIN/lib'
@@ -183,7 +194,7 @@ if steamworks == true
         install: (host_system != 'windows'))
 endif
 
-executable(exe_name,
+mkxp_exe = executable(exe_name,
     sources: global_sources,
     dependencies: global_dependencies,
     include_directories: global_include_dirs,
@@ -193,5 +204,9 @@ executable(exe_name,
     objc_args: global_args,
     objcpp_args: global_args,
     win_subsystem: 'windows',
-    install: (host_system != 'windows')
+    install: (host_system != 'windows' and host_system != 'vita')
 )
+
+if host_system == 'vita'
+    subdir('platform/vita')
+endif

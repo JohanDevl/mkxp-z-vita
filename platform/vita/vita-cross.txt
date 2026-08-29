@@ -1,0 +1,31 @@
+# Meson cross file for the PlayStation Vita (VitaSDK).
+#
+# Assumes VitaSDK is installed at /usr/local/vitasdk (the standard location
+# used by the vitasdk/vitasdk Docker image and CI). If your SDK lives
+# elsewhere, regenerate this file or add the SDK's bin/ to PATH — every
+# binary below is referenced by name, not absolute path.
+
+[binaries]
+c = 'arm-vita-eabi-gcc'
+cpp = 'arm-vita-eabi-g++'
+ar = 'arm-vita-eabi-ar'
+strip = 'arm-vita-eabi-strip'
+pkg-config = 'arm-vita-eabi-pkg-config'
+cmake = 'cmake'
+
+[host_machine]
+system = 'vita'
+cpu_family = 'arm'
+cpu = 'cortex-a9'
+endian = 'little'
+
+[built-in options]
+# -Wl,-q keeps relocations in the ELF; vita-elf-create requires them.
+c_args = ['-O2', '-mtune=cortex-a9', '-mfpu=neon', '-ftree-vectorize']
+cpp_args = ['-O2', '-mtune=cortex-a9', '-mfpu=neon', '-ftree-vectorize']
+c_link_args = ['-Wl,-q']
+cpp_link_args = ['-Wl,-q']
+default_library = 'static'
+
+[properties]
+needs_exe_wrapper = true
