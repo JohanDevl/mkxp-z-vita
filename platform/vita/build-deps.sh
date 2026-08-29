@@ -145,17 +145,25 @@ if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
     # local builds (observed in CI: the ar step runs with an empty
     # object list, leaving a core-only archive). Append the ext and enc
     # objects explicitly when Init_ext is absent; "ar r" is idempotent.
-    if ! arm-vita-eabi-nm libruby.a | grep -q "T Init_ext"; then
+    #
+    # NB: the check must not be "nm | grep -q" — under pipefail, grep -q
+    # exiting early SIGPIPEs nm on the large symbol list and the
+    # pipeline reads as a failure even on a match. grep -c consumes the
+    # whole stream.
+    init_ext_count() {
+        arm-vita-eabi-nm libruby.a 2>/dev/null | grep -c "T Init_ext" || true
+    }
+    if [ "$(init_ext_count)" = "0" ]; then
         # shellcheck disable=SC2046
         arm-vita-eabi-ar r libruby.a \
             $(find ext -name '*.o') \
             enc/encinit.o enc/encdb.o enc/trans/transdb.o
         arm-vita-eabi-ranlib libruby.a
     fi
-    arm-vita-eabi-nm libruby.a | grep -q "T Init_ext" || {
+    if [ "$(init_ext_count)" = "0" ]; then
         echo "libruby.a is missing Init_ext (extensions not aggregated)"
         exit 1
-    }
+    fi
     # "make install" runs tool/rbinstall.rb under the host's (newer) ruby,
     # which cannot execute ruby 2.7's installer. Install the three things
     # the engine actually links against by hand: the static library, the
