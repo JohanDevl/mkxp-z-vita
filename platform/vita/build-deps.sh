@@ -105,18 +105,19 @@ fi
 # exiting early SIGPIPEs nm on the large symbol list and the pipeline
 # reads as a failure even on a match. grep -c consumes the whole stream.
 init_ext_count() {
-    arm-vita-eabi-nm libruby.a 2>/dev/null | grep -c "T Init_ext" || true
+    arm-vita-eabi-nm "$1" 2>/dev/null | grep -c "T Init_ext" || true
 }
 aggregate_libruby() {
-    if [ "$(init_ext_count)" = "0" ]; then
+    local archive="$1"
+    if [ "$(init_ext_count "$archive")" = "0" ]; then
         # shellcheck disable=SC2046
-        arm-vita-eabi-ar r libruby.a \
+        arm-vita-eabi-ar r "$archive" \
             $(find ext -name '*.o') \
             enc/encinit.o enc/encdb.o enc/trans/transdb.o
-        arm-vita-eabi-ranlib libruby.a
+        arm-vita-eabi-ranlib "$archive"
     fi
-    if [ "$(init_ext_count)" = "0" ]; then
-        echo "libruby.a is missing Init_ext (extensions not aggregated)"
+    if [ "$(init_ext_count "$archive")" = "0" ]; then
+        echo "$archive is missing Init_ext (extensions not aggregated)"
         exit 1
     fi
 }
@@ -134,13 +135,21 @@ if [ "$MRI_VERSION" = "3.1" ] && ! ls "$PREFIX"/lib/pkgconfig/ruby-3.1*.pc >/dev
     rm -f vita.cache
     ../configure-vita
     make -j"$JOBS"
-    aggregate_libruby
+    make libruby-static.a
+    aggregate_libruby libruby-static.a
     # "make install" runs tool/rbinstall.rb under the host ruby; install
     # the pieces the engine needs by hand instead (library, pkg-config
     # file with pthread normalized, headers, and the stdlib staged for
     # VPK packaging).
-    cp libruby.a "$PREFIX/lib/libruby-static.a"
-    sed 's/-lpthread/-pthread/' ruby-3.1.pc > "$PREFIX/lib/pkgconfig/ruby-3.1.pc"
+    cp libruby-static.a "$PREFIX/lib/libruby-static.a"
+    # The generated pc needs three repairs: make-syntax LIBRUBYARG left
+    # unexpanded by config.status; --compress-debug-sections, which
+    # VitaSDK's ld rejects; and the usual -lpthread normalization.
+    ./config.status --file=ruby-3.1.pc:../template/ruby.pc.in >/dev/null
+    sed -e 's|$(LIBRUBYARG_STATIC)|-lruby-static|g' \
+        -e 's|-Wl,--compress-debug-sections=zlib||g' \
+        -e 's/-lpthread/-pthread/' \
+        ruby-3.1.pc > "$PREFIX/lib/pkgconfig/ruby-3.1.pc"
     mkdir -p "$PREFIX/include/ruby-3.1.0"
     cp -r ../include/* "$PREFIX/include/ruby-3.1.0/"
     cp -r .ext/include/*/ "$PREFIX/include/ruby-3.1.0/"
@@ -199,7 +208,7 @@ if [ "$MRI_VERSION" = "2.7" ] && ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev
     # This tree's rebuild-static-with-exts hook also refreshes the pc's
     # Libs.private with the ext libs; run it, then aggregate explicitly.
     make rebuild-static-with-exts
-    aggregate_libruby
+    aggregate_libruby libruby.a
     # "make install" runs tool/rbinstall.rb under the host's (newer) ruby,
     # which cannot execute ruby 2.7's installer. Install the three things
     # the engine actually links against by hand: the static library, the
