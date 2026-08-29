@@ -14,14 +14,19 @@
 #   2. SDL2_sound      - not packaged by VitaSDK. v2.0.4 (the SDL2 branch;
 #                        master is SDL3-based).
 #   3. uchardet        - not packaged by VitaSDK.
-#   4. ruby 2.7        - sinister-kid/ruby2.7-vita, the CRuby port using
-#                        SceFiber coroutines. Scaffold interpreter per PRD D4
-#                        (scaffold on 2.7, ship on 3.1). Requires a native
-#                        ruby and autoconf 2.69 on the build host.
+#   4. ruby            - MRI_VERSION=3.1 (default): JohanDevl/ruby3.1-vita,
+#                        the mkxp-z ruby 3.1.3 fork with the Vita platform
+#                        layer (SceFiber coroutines) - what Essentials v20+
+#                        games need (PRD Q6/M4b).
+#                        MRI_VERSION=2.7: sinister-kid/ruby2.7-vita, the
+#                        original scaffold (PRD D4 fallback); needs
+#                        autoconf 2.69.
+#                        Both need a native ruby (BASERUBY) on the host.
 
 set -euo pipefail
 
 : "${VITASDK:?VITASDK must be set}"
+MRI_VERSION="${MRI_VERSION:-3.1}"
 PREFIX="$VITASDK/arm-vita-eabi"
 TOOLCHAIN="$VITASDK/share/vita.toolchain.cmake"
 JOBS="$(nproc 2>/dev/null || sysctl -n hw.ncpu)"
@@ -92,8 +97,66 @@ if [ ! -f "$PREFIX/include/fluidsynth.h" ]; then
     printf '#include "fluidlite.h"\n' > "$PREFIX/include/fluidsynth.h"
 fi
 
+# Append the ext and enc objects into libruby.a when Init_ext is absent
+# ("ar r" is idempotent). The in-tree aggregation hooks are unreliable
+# outside incremental local builds.
+#
+# NB: the check must not be "nm | grep -q" — under pipefail, grep -q
+# exiting early SIGPIPEs nm on the large symbol list and the pipeline
+# reads as a failure even on a match. grep -c consumes the whole stream.
+init_ext_count() {
+    arm-vita-eabi-nm libruby.a 2>/dev/null | grep -c "T Init_ext" || true
+}
+aggregate_libruby() {
+    if [ "$(init_ext_count)" = "0" ]; then
+        # shellcheck disable=SC2046
+        arm-vita-eabi-ar r libruby.a \
+            $(find ext -name '*.o') \
+            enc/encinit.o enc/encdb.o enc/trans/transdb.o
+        arm-vita-eabi-ranlib libruby.a
+    fi
+    if [ "$(init_ext_count)" = "0" ]; then
+        echo "libruby.a is missing Init_ext (extensions not aggregated)"
+        exit 1
+    fi
+}
+
+# ----------------------------------------------------------------- ruby 3.1
+if [ "$MRI_VERSION" = "3.1" ] && ! ls "$PREFIX"/lib/pkgconfig/ruby-3.1*.pc >/dev/null 2>&1; then
+    msg "ruby 3.1 (JohanDevl/ruby3.1-vita: mkxp-z ruby + Vita layer, SceFiber)"
+    command -v ruby >/dev/null || { echo "A native ruby is required (BASERUBY)"; exit 1; }
+    cd "$WORK"
+    [ -d ruby3.1-vita ] || git clone -q --depth 1 --single-branch --branch vita \
+        https://github.com/JohanDevl/ruby3.1-vita.git
+    cd ruby3.1-vita
+    [ -f configure ] || autoreconf -i
+    mkdir -p build && cd build
+    rm -f vita.cache
+    ../configure-vita
+    make -j"$JOBS"
+    aggregate_libruby
+    # "make install" runs tool/rbinstall.rb under the host ruby; install
+    # the pieces the engine needs by hand instead (library, pkg-config
+    # file with pthread normalized, headers, and the stdlib staged for
+    # VPK packaging).
+    cp libruby.a "$PREFIX/lib/libruby-static.a"
+    sed 's/-lpthread/-pthread/' ruby-3.1.pc > "$PREFIX/lib/pkgconfig/ruby-3.1.pc"
+    mkdir -p "$PREFIX/include/ruby-3.1.0"
+    cp -r ../include/* "$PREFIX/include/ruby-3.1.0/"
+    cp -r .ext/include/*/ "$PREFIX/include/ruby-3.1.0/"
+    # Stage the pure-ruby stdlib (plus the generated rbconfig.rb) so the
+    # VPK packaging can ship it at app0:ruby.
+    RUBY_STDLIB="$PREFIX/mkxpz-ruby-stdlib"
+    rm -rf "$RUBY_STDLIB"
+    mkdir -p "$RUBY_STDLIB"
+    cp -r ../lib/* "$RUBY_STDLIB/"
+    cp rbconfig.rb "$RUBY_STDLIB/"
+elif [ "$MRI_VERSION" = "3.1" ]; then
+    msg "ruby 3.1 already installed, skipping"
+fi
+
 # ----------------------------------------------------------------- ruby 2.7
-if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
+if [ "$MRI_VERSION" = "2.7" ] && ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
     msg "ruby 2.7 (sinister-kid/ruby2.7-vita, SceFiber coroutines)"
     command -v ruby >/dev/null || { echo "A native ruby is required (BASERUBY)"; exit 1; }
     # ruby 2.7's configure.ac needs autoconf 2.69; newer autoconf fails.
@@ -133,37 +196,10 @@ if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
         CXX=arm-vita-eabi-g++ \
         CFLAGS="$RUBY_CFLAGS"
     make -j"$JOBS"
-    # The vita port aggregates core + enc + ext objects (including
-    # ext/extinit.o, which defines Init_ext) into libruby.a through the
-    # rebuild-static-with-exts post-build hook, and that hook also
-    # appends the ext link flags to ruby-2.7.pc. Depending on make
-    # scheduling it does not always run as part of "all"; invoke it
-    # explicitly and verify the result.
-    # (also refreshes ruby-2.7.pc's Libs.private with the ext libs)
+    # This tree's rebuild-static-with-exts hook also refreshes the pc's
+    # Libs.private with the ext libs; run it, then aggregate explicitly.
     make rebuild-static-with-exts
-    # The aggregation in that recipe is unreliable outside incremental
-    # local builds (observed in CI: the ar step runs with an empty
-    # object list, leaving a core-only archive). Append the ext and enc
-    # objects explicitly when Init_ext is absent; "ar r" is idempotent.
-    #
-    # NB: the check must not be "nm | grep -q" — under pipefail, grep -q
-    # exiting early SIGPIPEs nm on the large symbol list and the
-    # pipeline reads as a failure even on a match. grep -c consumes the
-    # whole stream.
-    init_ext_count() {
-        arm-vita-eabi-nm libruby.a 2>/dev/null | grep -c "T Init_ext" || true
-    }
-    if [ "$(init_ext_count)" = "0" ]; then
-        # shellcheck disable=SC2046
-        arm-vita-eabi-ar r libruby.a \
-            $(find ext -name '*.o') \
-            enc/encinit.o enc/encdb.o enc/trans/transdb.o
-        arm-vita-eabi-ranlib libruby.a
-    fi
-    if [ "$(init_ext_count)" = "0" ]; then
-        echo "libruby.a is missing Init_ext (extensions not aggregated)"
-        exit 1
-    fi
+    aggregate_libruby
     # "make install" runs tool/rbinstall.rb under the host's (newer) ruby,
     # which cannot execute ruby 2.7's installer. Install the three things
     # the engine actually links against by hand: the static library, the
@@ -178,7 +214,7 @@ if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
     mkdir -p "$PREFIX/include/ruby-2.7.0"
     cp -r ../include/* "$PREFIX/include/ruby-2.7.0/"
     cp -r .ext/include/arm-vita "$PREFIX/include/ruby-2.7.0/"
-else
+elif [ "$MRI_VERSION" = "2.7" ]; then
     msg "ruby 2.7 already installed, skipping"
 fi
 

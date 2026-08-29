@@ -31,12 +31,26 @@ sfo = custom_target('param_sfo',
               vita_app_name, '@OUTPUT@'],
     build_by_default: true)
 
+vpk_adds = [
+    '--add', meson.current_source_dir() / 'sce_sys' / 'icon0.png' + '=sce_sys/icon0.png',
+]
+
+# Ruby's pure-ruby stdlib, staged by build-deps.sh; required at runtime
+# by Essentials games ("require" of zlib wrappers, forwardable, ...).
+fs = import('fs')
+ruby_stdlib_dir = '/usr/local/vitasdk/arm-vita-eabi/mkxpz-ruby-stdlib'
+if fs.is_dir(ruby_stdlib_dir)
+    vpk_adds += ['--add', ruby_stdlib_dir + '=ruby']
+else
+    warning('Ruby stdlib staging dir not found (' + ruby_stdlib_dir + '); the VPK will lack app0:ruby')
+endif
+
 vpk = custom_target('vpk',
     input: [eboot, sfo],
     output: 'mkxp-z.vpk',
     command: [vita_pack_vpk,
               '-b', '@INPUT0@',
               '-s', '@INPUT1@',
-              '--add', meson.current_source_dir() / 'sce_sys' / 'icon0.png' + '=sce_sys/icon0.png',
+              vpk_adds,
               '@OUTPUT@'],
     build_by_default: true)

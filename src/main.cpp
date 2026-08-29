@@ -215,6 +215,13 @@ static void setupWindowIcon(const Config &conf, SDL_Window *win) {
   }
 }
 
+#ifdef __vita__
+/* newlib's default heap (~32 MB) cannot hold an Essentials game; claim
+ * most of the extended-memory budget (param.sfo sets ATTRIBUTE2=12).
+ * The right ceiling is a PRD Q1 hardware measurement. */
+unsigned int _newlib_heap_size_user __attribute__((used)) = 192 * 1024 * 1024;
+#endif
+
 int main(int argc, char *argv[]) {
     SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
     SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0");

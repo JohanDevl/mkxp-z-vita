@@ -1270,6 +1270,11 @@ static void mriBindingExecute() {
     rb_ary_push(lpaths, rb_str_new(resPath.c_str(), resPath.size()));
 #endif
     
+#ifdef __vita__
+    /* Ruby stdlib staged into the VPK by the packaging step. */
+    rb_ary_push(lpaths, rb_utf8_str_new_cstr("app0:ruby"));
+#endif
+
     if (!conf.rubyLoadpaths.empty()) {
         /* Setup custom load paths */
         for (size_t i = 0; i < conf.rubyLoadpaths.size(); ++i) {

@@ -24,14 +24,16 @@ SETUP_ARGS=()
 #   gfx_backend=gles      - the Vita is a GLES2 platform (Q8)
 #   use_miniffi=false     - Essentials v19+ uses no Win32API (Q9/D7)
 #   enable-https=false    - keeps binaries cleanly GPLv2+ (PRD 10.3)
-#   mri_version=2.7       - scaffold interpreter (D4); 3.1 is the ship target
+#   mri_version=3.1       - what Essentials v20+ ships (Q6); set
+#                           MRI_VERSION=2.7 in the environment (and for
+#                           build-deps.sh) to fall back to the scaffold
 #   shared_fluid=true     - no dlopen on Vita; link fluidsynth directly
 meson setup "$BUILDDIR" "${SETUP_ARGS[@]}" \
     --cross-file platform/vita/vita-cross.txt \
     -Dgfx_backend=gles \
     -Duse_miniffi=false \
     -Denable-https=false \
-    -Dmri_version=2.7 \
+    -Dmri_version="${MRI_VERSION:-3.1}" \
     -Dshared_fluid=true \
     "$@"
 

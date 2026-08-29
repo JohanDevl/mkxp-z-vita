@@ -33,10 +33,19 @@ The canonical option set (see `build.sh` for the rationale of each):
 `gfx_backend=gles`, `use_miniffi=false`, `enable-https=false`,
 `mri_version=2.7`, `shared_fluid=true`.
 
-Ruby 2.7 is the **scaffold** interpreter (PRD D4): it proves platform and
-engine integration using the existing `ruby2.7-vita` port. The ship target
-for modern Essentials games (v19+) is **Ruby 3.1** — an open port, tracked
-as PRD Q6/M4b.
+The interpreter is **Ruby 3.1** — the version Essentials v20+ games ship
+(PRD Q6/M4b) — built from
+[JohanDevl/ruby3.1-vita](https://github.com/JohanDevl/ruby3.1-vita):
+mkxp-z's own ruby 3.1.3 fork (their RGSS compatibility patches included)
+plus the Vita platform layer, whose SceFiber coroutine approach follows
+[sinister-kid/ruby2.7-vita](https://github.com/sinister-kid/ruby2.7-vita)
+(PRD D4). Set `MRI_VERSION=2.7` for both scripts to fall back to the
+2.7 scaffold. The pure-ruby stdlib is packaged into the VPK at
+`app0:ruby`.
+
+**The SceFiber/GC behavior on 3.1 is compile-proven only** — fibers,
+stack scanning, and kernel memblock bookkeeping are exactly the things
+that only hardware can validate (PRD: feasibility at M0b, proof at M4b).
 
 ## Graphics path
 
@@ -70,12 +79,12 @@ gate, and needs on-device measurements (PRD Q1–Q7) before further work.
 ## Licensing
 
 GPLv2+ like the rest of mkxp-z. `enable-https=false` keeps mkxp-z's own
-HTTPS/OpenSSL dependency out (PRD §10.3) — **but note that the Ruby 2.7
-scaffold currently links its openssl extension statically, so `libcrypto`
-is still in the binary** (visible in `ruby-2.7.pc`). Before any binary
-distribution, either build Ruby without the openssl extension
-(`ext/Setup.vita`) or resolve the licence question explicitly. No Sony
-or Imagination proprietary binaries are in this tree.
+HTTPS/OpenSSL dependency out (PRD §10.3), and the Ruby 3.1 build excludes
+the openssl extension (`--with-out-ext=openssl` in its `configure-vita`),
+so no OpenSSL code reaches the binary. (The legacy 2.7 scaffold path
+still links libcrypto through its openssl ext — a reason to prefer 3.1
+for distribution too.) No Sony or Imagination proprietary binaries are
+in this tree.
 
 Portions of the platform approach are informed by
 [LiEnby/mkxp-vita](https://github.com/LiEnby/mkxp-vita) (GPL-2.0), read as
