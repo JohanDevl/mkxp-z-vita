@@ -133,6 +133,17 @@ if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
         CXX=arm-vita-eabi-g++ \
         CFLAGS="$RUBY_CFLAGS"
     make -j"$JOBS"
+    # The vita port aggregates core + enc + ext objects (including
+    # ext/extinit.o, which defines Init_ext) into libruby.a through the
+    # rebuild-static-with-exts post-build hook, and that hook also
+    # appends the ext link flags to ruby-2.7.pc. Depending on make
+    # scheduling it does not always run as part of "all"; invoke it
+    # explicitly and verify the result.
+    make rebuild-static-with-exts
+    arm-vita-eabi-nm libruby.a | grep -q "T Init_ext" || {
+        echo "libruby.a is missing Init_ext (extensions not aggregated)"
+        exit 1
+    }
     # "make install" runs tool/rbinstall.rb under the host's (newer) ruby,
     # which cannot execute ruby 2.7's installer. Install the three things
     # the engine actually links against by hand: the static library, the
