@@ -139,7 +139,19 @@ if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
     # appends the ext link flags to ruby-2.7.pc. Depending on make
     # scheduling it does not always run as part of "all"; invoke it
     # explicitly and verify the result.
+    # (also refreshes ruby-2.7.pc's Libs.private with the ext libs)
     make rebuild-static-with-exts
+    # The aggregation in that recipe is unreliable outside incremental
+    # local builds (observed in CI: the ar step runs with an empty
+    # object list, leaving a core-only archive). Append the ext and enc
+    # objects explicitly when Init_ext is absent; "ar r" is idempotent.
+    if ! arm-vita-eabi-nm libruby.a | grep -q "T Init_ext"; then
+        # shellcheck disable=SC2046
+        arm-vita-eabi-ar r libruby.a \
+            $(find ext -name '*.o') \
+            enc/encinit.o enc/encdb.o enc/trans/transdb.o
+        arm-vita-eabi-ranlib libruby.a
+    fi
     arm-vita-eabi-nm libruby.a | grep -q "T Init_ext" || {
         echo "libruby.a is missing Init_ext (extensions not aggregated)"
         exit 1
