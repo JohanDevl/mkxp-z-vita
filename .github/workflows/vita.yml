@@ -1,0 +1,52 @@
+name: Vita build
+
+on:
+  push:
+    branches: [vita]
+  pull_request:
+    branches: [vita]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: vitasdk/vitasdk:latest
+    env:
+      DEPS_WORKDIR: /tmp/mkxp-z-vita-deps
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install host tools
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq ruby-full autoconf automake libtool \
+            bison xxd curl file zip meson ninja-build
+
+      - name: Install autoconf 2.69 (required by ruby 2.7)
+        run: |
+          curl -sL http://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz | tar xz -C /tmp
+          cd /tmp/autoconf-2.69
+          ./configure --prefix=/opt/ac269 >/dev/null
+          make -s && make -s install
+
+      - name: Cache dependency builds
+        uses: actions/cache@v4
+        with:
+          path: /tmp/mkxp-z-vita-deps
+          key: vita-deps-${{ hashFiles('platform/vita/build-deps.sh') }}
+
+      - name: Build Vita dependencies
+        run: platform/vita/build-deps.sh
+
+      - name: Build mkxp-z VPK
+        run: platform/vita/build.sh build-vita
+
+      - name: Upload VPK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkxp-z-vita-vpk
+          path: |
+            build-vita/platform/vita/mkxp-z.vpk
+            build-vita/mkxp-z
+          if-no-files-found: error
