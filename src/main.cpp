@@ -464,6 +464,12 @@ int main(int argc, char *argv[]) {
 #endif
 
     /* Start RGSS thread */
+#ifdef __vita__
+    /* SDL's Vita default thread stack is far too small for MRI, and the
+     * Ruby port has no working guard pages - stack_check is the only
+     * overflow detector, and it needs a real stack under it. */
+    SDL_SetHint(SDL_HINT_THREAD_STACK_SIZE, "8388608");
+#endif
     SDL_Thread *rgssThread = SDL_CreateThread(rgssThreadFun, "rgss", &rtData);
 
     /* Start event processing */

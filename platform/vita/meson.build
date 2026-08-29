@@ -38,11 +38,12 @@ vpk_adds = [
 # Ruby's pure-ruby stdlib, staged by build-deps.sh; required at runtime
 # by Essentials games ("require" of zlib wrappers, forwardable, ...).
 fs = import('fs')
-ruby_stdlib_dir = '/usr/local/vitasdk/arm-vita-eabi/mkxpz-ruby-stdlib'
+vitasdk_root = run_command('sh', '-c', 'echo -n "${VITASDK:-/usr/local/vitasdk}"', check: true).stdout()
+ruby_stdlib_dir = vitasdk_root / 'arm-vita-eabi' / 'mkxpz-ruby-stdlib'
 if fs.is_dir(ruby_stdlib_dir)
     vpk_adds += ['--add', ruby_stdlib_dir + '=ruby']
 else
-    warning('Ruby stdlib staging dir not found (' + ruby_stdlib_dir + '); the VPK will lack app0:ruby')
+    error('Ruby stdlib staging dir not found (' + ruby_stdlib_dir + '); run platform/vita/build-deps.sh first')
 endif
 
 vpk = custom_target('vpk',

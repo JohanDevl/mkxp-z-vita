@@ -159,6 +159,11 @@ if [ "$MRI_VERSION" = "3.1" ] && ! ls "$PREFIX"/lib/pkgconfig/ruby-3.1*.pc >/dev
     rm -rf "$RUBY_STDLIB"
     mkdir -p "$RUBY_STDLIB"
     cp -r ../lib/* "$RUBY_STDLIB/"
+    # The .rb halves of the statically linked extensions (json, digest,
+    # monitor, pathname, date, ...) are collected under .ext/common -
+    # without them every "require 'json'" raises LoadError on device.
+    [ -d .ext/common ] || { echo ".ext/common missing - ext stdlib not built?"; exit 1; }
+    cp -r .ext/common/. "$RUBY_STDLIB/"
     cp rbconfig.rb "$RUBY_STDLIB/"
 elif [ "$MRI_VERSION" = "3.1" ]; then
     msg "ruby 3.1 already installed, skipping"
