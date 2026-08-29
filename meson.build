@@ -68,14 +68,13 @@ gfx_backend = get_option('gfx_backend')
 if gfx_backend == 'gles'
     # Needs to be manually set up for now
     global_args += '-DGLES2_HEADER'
-    if host_system == 'vita'
-        # GLES2 on the Vita is provided at runtime by the PVR_PSP2 (Piglet)
-        # driver through the pib wrapper; SDL2 must be built with
-        # SDL_VIDEO_VITA_PIB (see platform/vita/build-deps.sh).
-        foreach l : ['pib', 'libScePiglet_stub', 'SceShaccCg_stub', 'taihen_stub']
-            global_dependencies += compilers['cpp'].find_library(l)
-        endforeach
-    endif
+    # GLES2 on the Vita is provided at runtime by the PVR_PSP2 (Piglet)
+    # driver through the pib wrapper. SDL2 must be built with
+    # SDL_VIDEO_VITA_PIB (see platform/vita/build-deps.sh), and its
+    # sdl2.pc then carries -lpib plus the *weak* Piglet/ShaccCg/taiHEN
+    # stubs. Do not add the non-weak stubs here: they would become hard
+    # module imports resolved at process load, so the app could never
+    # even start on a console without the PVR modules installed.
 elif gfx_backend == 'gl'
     global_dependencies += dependency('gl')
     # boop

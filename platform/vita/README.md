@@ -69,9 +69,13 @@ gate, and needs on-device measurements (PRD Q1–Q7) before further work.
 
 ## Licensing
 
-GPLv2+ like the rest of mkxp-z. `enable-https=false` keeps distributed
-binaries free of the OpenSSL/GPLv3 entanglement (PRD §10.3). No Sony or
-Imagination proprietary binaries are in this tree.
+GPLv2+ like the rest of mkxp-z. `enable-https=false` keeps mkxp-z's own
+HTTPS/OpenSSL dependency out (PRD §10.3) — **but note that the Ruby 2.7
+scaffold currently links its openssl extension statically, so `libcrypto`
+is still in the binary** (visible in `ruby-2.7.pc`). Before any binary
+distribution, either build Ruby without the openssl extension
+(`ext/Setup.vita`) or resolve the licence question explicitly. No Sony
+or Imagination proprietary binaries are in this tree.
 
 Portions of the platform approach are informed by
 [LiEnby/mkxp-vita](https://github.com/LiEnby/mkxp-vita) (GPL-2.0), read as

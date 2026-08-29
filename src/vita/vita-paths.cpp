@@ -42,6 +42,8 @@ void vitaEnsureDataLayout() {
         mkdir(d, 0777);
 }
 
+/* KEEP IN SYNC with the launcher's detection in
+ * RPG-Player/launcher/src/gamescan.cpp (isGameFolder). */
 bool vitaIsGameFolder(const std::string &dir) {
     if (!isFile(dir + "/Game.ini"))
         return false;

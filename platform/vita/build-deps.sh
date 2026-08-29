@@ -69,7 +69,7 @@ fi
 if [ ! -f "$PREFIX/lib/pkgconfig/uchardet.pc" ]; then
     msg "uchardet"
     cd "$WORK"
-    [ -d uchardet ] || git clone -q --depth 1 https://gitlab.freedesktop.org/uchardet/uchardet.git
+    [ -d uchardet ] || git clone -q --depth 1 --branch v0.0.8 https://gitlab.freedesktop.org/uchardet/uchardet.git
     cd uchardet
     cmake -B build-vita \
         -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
@@ -97,11 +97,11 @@ if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
     msg "ruby 2.7 (sinister-kid/ruby2.7-vita, SceFiber coroutines)"
     command -v ruby >/dev/null || { echo "A native ruby is required (BASERUBY)"; exit 1; }
     # ruby 2.7's configure.ac needs autoconf 2.69; newer autoconf fails.
-    if autoconf --version | head -1 | grep -qv '2\.69'; then
+    if ! command -v autoconf >/dev/null || ! autoconf --version | head -1 | grep -q '2\.69'; then
         if [ -x /opt/ac269/bin/autoconf ]; then
             export PATH="/opt/ac269/bin:$PATH"
         else
-            echo "autoconf 2.69 required (found $(autoconf --version | head -1))"
+            echo "autoconf 2.69 required (found: $(autoconf --version 2>/dev/null | head -1 || echo none))"
             echo "Install to /opt/ac269 or put autoconf 2.69 first in PATH."
             exit 1
         fi
@@ -169,7 +169,17 @@ fi
 # second time and fail with "multiple definition" of every pte_os*
 # symbol. Normalizing every .pc to the -pthread flag is safe: the GCC
 # driver collapses repeated flags and the spec expands it exactly once.
-msg "Normalizing -lpthread to -pthread in sysroot .pc files"
-sed -i 's/-lpthread/-pthread/g' "$PREFIX"/lib/pkgconfig/*.pc
+#
+# NOTE: this rewrites pkg-config files across the whole sysroot. That is
+# what you want in the throwaway Docker/CI container this script is
+# written for; on a personal VitaSDK install, set VITA_PC_PTHREAD_FIXUP=0
+# to skip it (the engine link will then fail on any dep whose .pc still
+# carries -lpthread, e.g. libwebp).
+if [ "${VITA_PC_PTHREAD_FIXUP:-1}" != "0" ]; then
+    msg "Normalizing -lpthread to -pthread in sysroot .pc files"
+    sed -i 's/-lpthread/-pthread/g' "$PREFIX"/lib/pkgconfig/*.pc
+else
+    msg "Skipping sysroot -lpthread normalization (VITA_PC_PTHREAD_FIXUP=0)"
+fi
 
 msg "All Vita dependencies installed into $PREFIX"
