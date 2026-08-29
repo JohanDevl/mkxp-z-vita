@@ -98,8 +98,14 @@ std::string filesystemImpl::normalizePath(const char *path, bool preferred, bool
 }
 
 std::string filesystemImpl::getDefaultGameRoot() {
+#ifdef __vita__
+    /* Resolve the game to run from the memory card layout
+     * (boot.json, then the first game in the library). */
+    return vitaResolveGameFolder();
+#else
     char *p = SDL_GetBasePath();
     std::string ret(p);
     SDL_free(p);
     return ret;
+#endif
 }

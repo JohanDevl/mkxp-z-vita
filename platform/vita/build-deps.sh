@@ -40,7 +40,7 @@ if [ ! -f "$PREFIX/lib/pkgconfig/sdl2.pc" ] || ! grep -q 'pib' "$PREFIX/lib/pkgc
         -DCMAKE_TOOLCHAIN_FILE="$TOOLCHAIN" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-        -DSDL_VIDEO_VITA_PIB=ON
+        -DVIDEO_VITA_PIB=ON
     cmake --build build-vita -j"$JOBS"
     cmake --install build-vita
 else
@@ -102,9 +102,34 @@ if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
     cd ruby2.7-vita
     autoreconf -i
     mkdir -p build && cd build
-    ../configure-vita
+    # Mirrors upstream's configure-vita, with three additions to the CFLAGS
+    # needed by modern GCC (>= 14/15):
+    #   -std=gnu17: ruby 2.7 uses K&R declarations ("char *strerror();")
+    #     whose meaning changed in C23, GCC 15's default
+    #   -Wno-incompatible-pointer-types / -Wno-int-conversion: promoted to
+    #     errors in GCC 14, breaks rb_f_notimplement prototype tricks
+    RUBY_CFLAGS="-O3 -std=gnu17 -DNO_DEBUG -DMKXPZ_PATCH -Wno-incompatible-pointer-types -Wno-int-conversion"
+    export rb_cv_arflags=rcu
+    ../configure -C --host=arm-vita-eabi \
+        --prefix="$PREFIX" \
+        --cache-file=vita.cache \
+        --enable-pthread=yes \
+        --disable-rubygems \
+        --disable-fortify-source \
+        --disable-install-doc \
+        CC=arm-vita-eabi-gcc \
+        CXX=arm-vita-eabi-g++ \
+        CFLAGS="$RUBY_CFLAGS"
     make -j"$JOBS"
-    make install
+    # "make install" runs tool/rbinstall.rb under the host's (newer) ruby,
+    # which cannot execute ruby 2.7's installer. Install the three things
+    # the engine actually links against by hand: the static library, the
+    # pkg-config file, and the headers (source + generated arch config.h).
+    cp libruby.a "$PREFIX/lib/libruby.a"
+    cp ruby-2.7.pc "$PREFIX/lib/pkgconfig/ruby-2.7.pc"
+    mkdir -p "$PREFIX/include/ruby-2.7.0"
+    cp -r ../include/* "$PREFIX/include/ruby-2.7.0/"
+    cp -r .ext/include/arm-vita "$PREFIX/include/ruby-2.7.0/"
 else
     msg "ruby 2.7 already installed, skipping"
 fi
