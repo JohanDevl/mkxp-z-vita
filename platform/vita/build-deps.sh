@@ -111,6 +111,9 @@ if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
     cd ruby2.7-vita
     autoreconf -i
     mkdir -p build && cd build
+    # A cached configure run from an earlier script version would abort
+    # on changed CFLAGS; start clean.
+    rm -f vita.cache
     # Mirrors upstream's configure-vita, with three additions to the CFLAGS
     # needed by modern GCC (>= 14/15):
     #   -std=gnu17: ruby 2.7 uses K&R declarations ("char *strerror();")
@@ -147,5 +150,15 @@ if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
 else
     msg "ruby 2.7 already installed, skipping"
 fi
+
+# --------------------------------------------------------- sysroot fixups
+# VitaSDK's GCC expands -pthread into "--whole-archive -lpthread
+# --no-whole-archive". Any bare -lpthread from a .pc file (libwebp,
+# openal, ruby, ...) beside that expansion makes ld load libpthread.a a
+# second time and fail with "multiple definition" of every pte_os*
+# symbol. Normalizing every .pc to the -pthread flag is safe: the GCC
+# driver collapses repeated flags and the spec expands it exactly once.
+msg "Normalizing -lpthread to -pthread in sysroot .pc files"
+sed -i 's/-lpthread/-pthread/g' "$PREFIX"/lib/pkgconfig/*.pc
 
 msg "All Vita dependencies installed into $PREFIX"
