@@ -28,8 +28,12 @@
 #include <vector>
 #include <string>
 
+/* SDL_ttf renamed the underlying tag of TTF_Font (>= 2.21), so a
+ * forward declaration can no longer name it portably; include the
+ * real header instead. */
+#include <SDL_ttf.h>
+
 struct SDL_RWops;
-struct _TTF_Font;
 struct Config;
 
 struct SharedFontStatePrivate;
@@ -47,12 +51,12 @@ public:
 	void initFontSetCB(SDL_RWops &ops,
 	                   const std::string &filename);
 
-	_TTF_Font *getFont(std::string family,
+	TTF_Font *getFont(std::string family,
 	                   int size, float hiresMult, int outline_size = 0);
 
 	bool fontPresent(std::string family) const;
 
-	static _TTF_Font *openBundled(int size);
+	static TTF_Font *openBundled(int size);
     void setDefaultFontFamily(const std::string &family);
 
 private:
@@ -117,7 +121,7 @@ public:
 	static void initDefaults(const SharedFontState &sfs);
 
 	/* internal */
-	_TTF_Font *getSdlFont(int outline_size);
+	TTF_Font *getSdlFont(int outline_size);
 
 private:
 	FontPrivate *p;

@@ -27,7 +27,9 @@ typedef fluid_settings_t* (*NEWFLUIDSETTINGSPROC)(void);
 typedef fluid_synth_t* (*NEWFLUIDSYNTHPROC)(fluid_settings_t* settings);
 typedef void (*DELETEFLUIDSETTINGSPROC)(fluid_settings_t* settings);
 
-#if FLUIDSYNTH_VERSION_MAJOR == 1
+/* fluidlite implements the fluidsynth 1.x API but versions itself with
+ * FLUIDLITE_VERSION_MAJOR; treat it like fluidsynth 1. */
+#if FLUIDSYNTH_VERSION_MAJOR == 1 || defined(FLUIDLITE_VERSION_MAJOR)
 typedef int (*DELETEFLUIDSYNTHPROC)(fluid_synth_t* synth);
 #else
 typedef void (*DELETEFLUIDSYNTHPROC)(fluid_synth_t* synth);

@@ -14,6 +14,10 @@
 #define FLUID_LIB "libfluidsynth.3.dylib"
 #elif __WIN32__
 #define FLUID_LIB "fluidsynth.dll"
+#elif defined(__vita__)
+/* No dlopen on the Vita; fluidlite is always linked in (SHARED_FLUID),
+ * so the library name is never used. */
+#define FLUID_LIB ""
 #else
 #error "platform not recognized"
 #endif

@@ -83,6 +83,15 @@ else
     msg "uchardet already installed, skipping"
 fi
 
+# ------------------------------------------------------- fluidsynth header
+# VitaSDK ships fluidlite, whose pkg-config file is named fluidsynth but
+# whose headers live only under fluidsynth/. mkxp includes <fluidsynth.h>
+# like the real fluidsynth installs it; provide the classic entry point.
+if [ ! -f "$PREFIX/include/fluidsynth.h" ]; then
+    msg "fluidsynth.h compatibility header (fluidlite)"
+    printf '#include "fluidlite.h"\n' > "$PREFIX/include/fluidsynth.h"
+fi
+
 # ----------------------------------------------------------------- ruby 2.7
 if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
     msg "ruby 2.7 (sinister-kid/ruby2.7-vita, SceFiber coroutines)"
@@ -126,7 +135,12 @@ if ! ls "$PREFIX"/lib/pkgconfig/ruby-2.7*.pc >/dev/null 2>&1; then
     # the engine actually links against by hand: the static library, the
     # pkg-config file, and the headers (source + generated arch config.h).
     cp libruby.a "$PREFIX/lib/libruby.a"
-    cp ruby-2.7.pc "$PREFIX/lib/pkgconfig/ruby-2.7.pc"
+    # VitaSDK's GCC expands -pthread into "--whole-archive -lpthread
+    # --no-whole-archive"; a bare -lpthread from this .pc alongside that
+    # expansion makes ld load libpthread.a twice (multiple definition of
+    # every pte_os* symbol). Normalize to the -pthread flag, which the
+    # spec collapses however often it appears.
+    sed 's/-lpthread/-pthread/' ruby-2.7.pc > "$PREFIX/lib/pkgconfig/ruby-2.7.pc"
     mkdir -p "$PREFIX/include/ruby-2.7.0"
     cp -r ../include/* "$PREFIX/include/ruby-2.7.0/"
     cp -r .ext/include/arm-vita "$PREFIX/include/ruby-2.7.0/"

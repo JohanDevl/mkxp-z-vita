@@ -179,9 +179,20 @@ main_source = files(
     'input/keybindings.cpp',
 
     'net/LUrlParser.cpp',
-    'net/net.cpp',
 
     'system/systemImpl.cpp'
 )
+
+if host_system == 'vita'
+    # cpp-httplib needs ifaddrs.h/BSD sockets that newlib lacks; the
+    # stub keeps the HTTPLite module present but raises on use.
+    main_source += files('vita/net-stub.cpp', 'vita/vita-paths.cpp')
+    global_include_dirs += include_directories('vita')
+    # newlib hides POSIX declarations (strdup, strerror_r, ...) under
+    # -std=c++NN; the sources expect them.
+    global_args += '-U__STRICT_ANSI__'
+else
+    main_source += files('net/net.cpp')
+endif
 
 global_sources += main_source

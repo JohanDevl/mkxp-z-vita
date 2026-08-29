@@ -97,6 +97,10 @@ std::string filesystemImpl::normalizePath(const char *path, bool preferred, bool
     return ret;
 }
 
+#ifdef __vita__
+#include "vita/vita-paths.h"
+#endif
+
 std::string filesystemImpl::getDefaultGameRoot() {
 #ifdef __vita__
     /* Resolve the game to run from the memory card layout

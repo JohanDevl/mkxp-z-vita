@@ -72,6 +72,10 @@
 #elif defined(__EMSCRIPTEN__)
 #define GHC_OS_WEB
 #include <wasi/api.h>
+#elif defined(__vita__)
+/* PlayStation Vita (VitaSDK/newlib): close enough to a generic
+ * POSIX/Linux system for the subset of operations mkxp uses. */
+#define GHC_OS_LINUX
 #else
 #error "Operating system currently not supported!"
 #endif

@@ -13,6 +13,7 @@
 #define MKXPZ_PLATFORM_WINDOWS 0
 #define MKXPZ_PLATFORM_MACOS 1
 #define MKXPZ_PLATFORM_LINUX 2
+#define MKXPZ_PLATFORM_VITA 3
 
 #ifdef __WIN32__
 #define MKXPZ_PLATFORM MKXPZ_PLATFORM_WINDOWS
@@ -20,6 +21,8 @@
 #define MKXPZ_PLATFORM MKXPZ_PLATFORM_MACOS
 #elif defined __linux__
 #define MKXPZ_PLATFORM MKXPZ_PLATFORM_LINUX
+#elif defined __vita__
+#define MKXPZ_PLATFORM MKXPZ_PLATFORM_VITA
 #else
 #error "Can't identify platform."
 #endif
