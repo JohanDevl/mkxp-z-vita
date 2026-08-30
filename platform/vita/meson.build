@@ -18,16 +18,20 @@ velf = custom_target('velf',
 eboot = custom_target('eboot',
     input: velf,
     output: 'eboot.bin',
-    command: [vita_make_fself, '-c', '-s', '@INPUT@', '@OUTPUT@'],
+    # No '-s': a *safe* fself cannot read vs0:, so the GPU driver's
+    # system imports (SceLibc/SceLibm/SceUlt) can never resolve. Every
+    # GL homebrew ships unsafe; HENkaku's "unsafe homebrew" toggle
+    # exists precisely for this.
+    command: [vita_make_fself, '-c', '@INPUT@', '@OUTPUT@'],
     build_by_default: true)
 
-# ATTRIBUTE2=12 requests the extended memory budget; RAM is the binding
-# constraint for this port (PRD Q1/Q2), so ask for everything available.
+# NOTE: no ATTRIBUTE2=12 (extended memory) for now - the PVR driver
+# needs CDRAM for its parameter buffers and extended-memory mode is
+# suspected to conflict; revisit with the PRD Q1 measurements.
 sfo = custom_target('param_sfo',
     output: 'param.sfo',
     command: [vita_mksfoex,
               '-s', 'TITLE_ID=' + vita_title_id,
-              '-d', 'ATTRIBUTE2=12',
               vita_app_name, '@OUTPUT@'],
     build_by_default: true)
 

@@ -51,6 +51,8 @@
 
 #ifdef __vita__
 #include <sys/stat.h>
+#include <psp2/kernel/modulemgr.h>
+#include <psp2/sysmodule.h>
 
 /* Bring-up breadcrumbs: appended to ux0:data/RPGPlayer/boot.log so a
  * hardware crash can be bisected without a debugger. If the file does
@@ -146,11 +148,14 @@ int rgssThreadFun(void *userdata) {
 #ifdef MKXPZ_INIT_GL_LATER
   threadData->glContext =
       initGL(threadData->window, threadData->config, threadData);
-  if (!threadData->glContext)
+  if (!threadData->glContext) {
+    VITA_BOOTLOG("rgss: initGL FAILED");
     return 0;
+  }
 #else
   SDL_GL_MakeCurrent(threadData->window, threadData->glContext);
 #endif
+  VITA_BOOTLOG("rgss: GL context ok");
 
   /* Setup AL context */
   static const ALCint attrs[] = {
@@ -174,6 +179,7 @@ int rgssThreadFun(void *userdata) {
   }
 
   alcMakeContextCurrent(alcCtx);
+  VITA_BOOTLOG("rgss: AL context ok");
 
   try {
     SharedState::initInstance(threadData);
@@ -183,9 +189,11 @@ int rgssThreadFun(void *userdata) {
 
     return 0;
   }
+  VITA_BOOTLOG("rgss: SharedState ok, starting scripts");
 
   /* Start script execution */
   scriptBinding->execute();
+  VITA_BOOTLOG("rgss: scripts finished");
 
   threadData->rqTermAck.set();
   threadData->ethread->requestTerminate();
@@ -208,6 +216,9 @@ static void printRgssVersion(int ver) {
 }
 
 static void rgssThreadError(RGSSThreadData *rtData, const std::string &msg) {
+#ifdef __vita__
+  vitaBootLog(("rgssError: " + msg).c_str());
+#endif
   rtData->rgssErrorMsg = msg;
   rtData->ethread->requestTerminate();
   rtData->rqTermAck.set();
@@ -258,8 +269,61 @@ int main(int argc, char *argv[]) {
     /* SDL's PVR backend loads the GLES2 driver modules from
      * VITA_MODULE_PATH (default app0:module). We do not bundle the PVR
      * .suprx set (provenance, PRD D6/10.4); users install it here. */
-    if (!SDL_getenv("VITA_MODULE_PATH"))
-        SDL_setenv("VITA_MODULE_PATH", "ur0:data/external", 1);
+    /* Prefer bundled modules (app0:module, SDL's default and the layout
+     * every known-working PVR setup uses); fall back to the shared
+     * ur0:data/external install. */
+    {
+        struct stat st{};
+        if (stat("app0:module/libIMGEGL.suprx", &st) != 0 &&
+            !SDL_getenv("VITA_MODULE_PATH"))
+            SDL_setenv("VITA_MODULE_PATH", "ur0:data/external", 1);
+    }
+    {
+        /* SDL ignores module-load failures and later jumps through the
+         * unresolved weak stubs (PC=0 crash). Check up front and leave
+         * a readable trace instead. */
+        /* libGLESv2 imports SceUlt, SceLibc/SceLibm and SceShaccCg;
+         * none are resident by default and SDL only loads fios2/libc.
+         * Bring in everything it needs before touching the driver set. */
+        {
+            char sbuf[128];
+            int r = sceSysmoduleLoadModule(SCE_SYSMODULE_ULT);
+            snprintf(sbuf, sizeof(sbuf), "sysmodule ULT -> 0x%08x", (unsigned)r);
+            vitaBootLog(sbuf);
+            SceUID m1 = sceKernelLoadStartModule("vs0:sys/external/libfios2.suprx", 0, NULL, 0, NULL, NULL);
+            SceUID m2 = sceKernelLoadStartModule("vs0:sys/external/libc.suprx", 0, NULL, 0, NULL, NULL);
+            SceUID m3 = sceKernelLoadStartModule("vs0:sys/external/libm.suprx", 0, NULL, 0, NULL, NULL);
+            snprintf(sbuf, sizeof(sbuf), "vs0 fios2=0x%08x libc=0x%08x libm=0x%08x",
+                     (unsigned)m1, (unsigned)m2, (unsigned)m3);
+            vitaBootLog(sbuf);
+        }
+        /* The ES2 driver imports SceShaccCg (runtime shader compiler);
+         * it must be resident before libGLESv2 loads. Standard install
+         * location is ur0:data/external (ShaRKBR33D). */
+        {
+            SceUID shacc = sceKernelLoadStartModule(
+                "ur0:data/external/libshacccg.suprx", 0, NULL, 0, NULL, NULL);
+            char sbuf[128];
+            snprintf(sbuf, sizeof(sbuf), "load libshacccg.suprx -> 0x%08x", (unsigned)shacc);
+            vitaBootLog(sbuf);
+        }
+        /* Driver modules are loaded by SDL itself in the canonical
+         * order (modules, then app hints, then EGL); loading them here
+         * too proved to break eglGetDisplay. Only verify presence. */
+        const char *mods[] = {"libgpu_es4_ext.suprx", "libIMGEGL.suprx",
+                              "libGLESv2.suprx", "libpvrPSP2_WSEGL.suprx",
+                              "libpvr2d.suprx"};
+        const char *base = SDL_getenv("VITA_MODULE_PATH");
+        if (!base) base = "app0:module";
+        char lbuf[192];
+        for (const char *m : mods) {
+            std::string full = std::string(base) + "/" + m;
+            struct stat st{};
+            snprintf(lbuf, sizeof(lbuf), "module %s: %s",
+                     stat(full.c_str(), &st) == 0 ? "ok" : "MISSING", full.c_str());
+            vitaBootLog(lbuf);
+        }
+    }
 #endif
 #ifdef __vita__
     /* C++ unwinding self-test: if this aborts, every later throw would
@@ -419,9 +483,19 @@ int main(int argc, char *argv[]) {
 #endif
     
     VITA_BOOTLOG("main: subsystems ok, creating window");
+#ifdef __vita__
+    /* The display only accepts native surface sizes; a 512x384 game
+     * window makes eglCreateWindowSurface fail. Always open the full
+     * 960x544 screen - mkxp letterboxes/scales the game internally
+     * (PRD 5.6). */
+    winFlags |= SDL_WINDOW_FULLSCREEN;
+    win = SDL_CreateWindow(conf.windowTitle.c_str(), SDL_WINDOWPOS_UNDEFINED,
+                           SDL_WINDOWPOS_UNDEFINED, 960, 544, winFlags);
+#else
     win = SDL_CreateWindow(conf.windowTitle.c_str(), SDL_WINDOWPOS_UNDEFINED,
                            SDL_WINDOWPOS_UNDEFINED, conf.defScreenW,
                            conf.defScreenH, winFlags);
+#endif
 
     if (!win) {
       showInitError(std::string("Error creating window: ") + SDL_GetError());
