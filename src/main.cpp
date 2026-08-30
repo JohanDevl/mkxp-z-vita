@@ -254,6 +254,15 @@ unsigned int _newlib_heap_size_user __attribute__((used)) = 96 * 1024 * 1024;
 
 int main(int argc, char *argv[]) {
     VITA_BOOTLOG("main: entered");
+#ifdef __vita__
+    /* C++ unwinding self-test: if this aborts, every later throw would
+     * terminate the process and nothing else is worth debugging. */
+    try {
+        throw 42;
+    } catch (int) {
+        VITA_BOOTLOG("main: exceptions ok");
+    }
+#endif
     SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
     SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0");
 
@@ -273,6 +282,7 @@ int main(int argc, char *argv[]) {
 
     if (!EventThread::allocUserEvents()) {
       showInitError("Error allocating SDL user events");
+      VITA_BOOTLOG("main: allocUserEvents FAILED");
       return 0;
     }
 
@@ -285,14 +295,19 @@ int main(int argc, char *argv[]) {
       strncpy(dataDir, tmp, sizeof(dataDir));
     }
 #endif
+    VITA_BOOTLOG("main: user events ok");
     if (!dataDir[0]) {
         strncpy(dataDir, mkxp_fs::getDefaultGameRoot().c_str(), sizeof(dataDir));
     }
+    VITA_BOOTLOG("main: game root resolved");
+    VITA_BOOTLOG(dataDir);
     mkxp_fs::setCurrentDirectory(dataDir);
+    VITA_BOOTLOG("main: chdir done");
 #endif
     
     /* now we load the config */
     Config conf;
+    VITA_BOOTLOG("main: config constructed");
     conf.read(argc, argv);
     VITA_BOOTLOG("main: config read");
 

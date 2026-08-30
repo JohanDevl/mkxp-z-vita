@@ -99,13 +99,18 @@ bool getEnvironmentBool(const char *env, bool defaultValue) {
 
 json::value readConfFile(const char *path) {
     
-    json::value ret(0);
+    json::value ret = json::object({});
     if (!mkxp_fs::fileExists(path)) {
-        return json::object({});
+        return ret;
     }
     
     try {
         std::string cfg = mkxp_fs::contentsOfFileAsString(path);
+        /* Strip a UTF-8 BOM; Windows-authored mkxp.json files carry one
+         * and json5pp treats it as a syntax error. */
+        if (cfg.size() >= 3 && (unsigned char)cfg[0] == 0xEF &&
+            (unsigned char)cfg[1] == 0xBB && (unsigned char)cfg[2] == 0xBF)
+            cfg.erase(0, 3);
         ret = json::parse5(Encoding::convertString(cfg));
     }
     catch (const std::exception &e) {
@@ -236,6 +241,10 @@ try { exp } catch (...) {}
     }
     
     json::value baseConf = readConfFile(CONF_FILE);
+    /* A failed parse must degrade to an empty object; as_object() on
+     * anything else throws outside of any guard. */
+    if (!baseConf.is_object())
+        baseConf = json::object({});
     copyObject(optsJ, baseConf);
     copyObject(opts["bindingNames"], baseConf.as_object()["bindingNames"], "bindingNames .");
     
@@ -269,6 +278,8 @@ try { exp } catch (...) {}
     // Now check for an extra mkxp.conf in the user's save directory and merge anything else from that
     userConfPath = mkxp_fs::normalizePath(std::string(customDataPath + "/" CONF_FILE).c_str(), 0, 1);
     json::value userConf = readConfFile(userConfPath.c_str());
+    if (!userConf.is_object())
+        userConf = json::object({});
     copyObject(optsJ, userConf);
     
     // now RESUME
