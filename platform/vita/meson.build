@@ -40,6 +40,11 @@ if not fs.is_dir(ruby_stdlib_dir)
     error('Ruby stdlib staging dir not found (' + ruby_stdlib_dir + '); run platform/vita/build-deps.sh first')
 endif
 
+# The stdlib is NOT bundled into the VPK: VitaShell's installer fails on
+# thousand-file packages (observed on hardware: a data abort from
+# vita-pack-vpk's layout, then SCE_KERNEL_ERROR_INVALID_ARGUMENT from
+# the canonical zip layout). It ships as a separate archive the user
+# copies to ux0:data/RPGPlayer/ruby over USB/FTP instead.
 vpk = custom_target('vpk',
     input: [eboot, sfo],
     output: 'mkxp-z.vpk',
@@ -47,6 +52,12 @@ vpk = custom_target('vpk',
               '@INPUT0@',
               '@INPUT1@',
               meson.current_source_dir() / 'sce_sys' / 'icon0.png',
-              ruby_stdlib_dir,
+              '-',
               '@OUTPUT@'],
+    build_by_default: true)
+
+make_stdlib_zip = find_program(meson.current_source_dir() / 'make-stdlib-zip.sh')
+ruby_stdlib_zip = custom_target('ruby-stdlib-zip',
+    output: 'ruby-stdlib.zip',
+    command: [make_stdlib_zip, ruby_stdlib_dir, '@OUTPUT@'],
     build_by_default: true)

@@ -1271,7 +1271,10 @@ static void mriBindingExecute() {
 #endif
     
 #ifdef __vita__
-    /* Ruby stdlib staged into the VPK by the packaging step. */
+    /* Ruby stdlib: preferred location is on the memory card (copied by
+     * the user - VitaShell's installer chokes on thousand-file VPKs);
+     * app0:ruby remains as fallback for bundled builds. */
+    rb_ary_push(lpaths, rb_utf8_str_new_cstr("ux0:data/RPGPlayer/ruby"));
     rb_ary_push(lpaths, rb_utf8_str_new_cstr("app0:ruby"));
 #endif
 
