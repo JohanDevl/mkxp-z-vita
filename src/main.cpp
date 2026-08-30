@@ -49,6 +49,28 @@
 
 #include "system/system.h"
 
+#ifdef __vita__
+#include <sys/stat.h>
+
+/* Bring-up breadcrumbs: appended to ux0:data/RPGPlayer/boot.log so a
+ * hardware crash can be bisected without a debugger. If the file does
+ * not even appear, death happened before main() (heap allocation,
+ * module resolution, newlib init). */
+void vitaBootLog(const char *msg) {
+    mkdir("ux0:data/RPGPlayer", 0777);
+    FILE *f = fopen("ux0:data/RPGPlayer/boot.log", "a");
+    if (f) {
+        fputs(msg, f);
+        fputc('\n', f);
+        fclose(f);
+    }
+}
+#define VITA_BOOTLOG(msg) vitaBootLog(msg)
+#else
+#define VITA_BOOTLOG(msg) ((void)0)
+#endif
+
+
 #if defined(__WIN32__)
 #include "resource.h"
 #include <Winsock2.h>
@@ -118,6 +140,7 @@ static SDL_GLContext initGL(SDL_Window *win, Config &conf,
                             RGSSThreadData *threadData);
 
 int rgssThreadFun(void *userdata) {
+  VITA_BOOTLOG("rgss: thread entered");
   RGSSThreadData *threadData = static_cast<RGSSThreadData *>(userdata);
 
 #ifdef MKXPZ_INIT_GL_LATER
@@ -192,6 +215,9 @@ static void rgssThreadError(RGSSThreadData *rtData, const std::string &msg) {
 
 static void showInitError(const std::string &msg) {
   Debug() << msg;
+#ifdef __vita__
+  vitaBootLog(("initError: " + msg).c_str());
+#endif
   SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "mkxp-z", msg.c_str(), 0);
 }
 
@@ -219,10 +245,15 @@ static void setupWindowIcon(const Config &conf, SDL_Window *win) {
 /* newlib's default heap (~32 MB) cannot hold an Essentials game; claim
  * most of the extended-memory budget (param.sfo sets ATTRIBUTE2=12).
  * The right ceiling is a PRD Q1 hardware measurement. */
-unsigned int _newlib_heap_size_user __attribute__((used)) = 192 * 1024 * 1024;
+/* Bring-up probe value: 192 MiB died before main() on hardware
+ * (no boot.log), consistent with the heap memblock allocation
+ * failing. 96 MiB tests that hypothesis; tune upward once the real
+ * budget (PRD Q1) is measured. */
+unsigned int _newlib_heap_size_user __attribute__((used)) = 96 * 1024 * 1024;
 #endif
 
 int main(int argc, char *argv[]) {
+    VITA_BOOTLOG("main: entered");
     SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");
     SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0");
 
@@ -237,6 +268,8 @@ int main(int argc, char *argv[]) {
       showInitError(std::string("Error initializing SDL: ") + SDL_GetError());
       return 0;
     }
+
+    VITA_BOOTLOG("main: SDL_Init ok");
 
     if (!EventThread::allocUserEvents()) {
       showInitError("Error allocating SDL user events");
@@ -261,6 +294,7 @@ int main(int argc, char *argv[]) {
     /* now we load the config */
     Config conf;
     conf.read(argc, argv);
+    VITA_BOOTLOG("main: config read");
 
 #if defined(__WIN32__)
     // Create a debug console in debug mode
@@ -362,6 +396,7 @@ int main(int argc, char *argv[]) {
 #endif
 #endif
     
+    VITA_BOOTLOG("main: subsystems ok, creating window");
     win = SDL_CreateWindow(conf.windowTitle.c_str(), SDL_WINDOWPOS_UNDEFINED,
                            SDL_WINDOWPOS_UNDEFINED, conf.defScreenW,
                            conf.defScreenH, winFlags);
@@ -445,6 +480,7 @@ int main(int argc, char *argv[]) {
     SDL_GLContext glCtx = NULL;
 #endif
 
+    VITA_BOOTLOG("main: window ok");
     RGSSThreadData rtData(&eventThread, argv[0], win, alcDev, mode.refresh_rate,
                           mkxp_sys::getScalingFactor(), conf, glCtx);
 
