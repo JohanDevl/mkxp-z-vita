@@ -240,7 +240,14 @@ try { exp } catch (...) {}
         }
     }
     
+#ifdef __vita__
+    void vitaBootLog(const char *msg);
+#define CONF_PROBE(m) vitaBootLog(m)
+#else
+#define CONF_PROBE(m) ((void)0)
+#endif
     json::value baseConf = readConfFile(CONF_FILE);
+    CONF_PROBE("conf: base read");
     /* A failed parse must degrade to an empty object; as_object() on
      * anything else throws outside of any guard. */
     if (!baseConf.is_object())
@@ -273,11 +280,15 @@ try { exp } catch (...) {}
         throw Exception(Exception::MKXPError, "Unable to switch into gameFolder %s", gameFolder.c_str());
     }
     
+    CONF_PROBE("conf: opts applied");
     readGameINI();
+    CONF_PROBE("conf: game ini read");
     
     // Now check for an extra mkxp.conf in the user's save directory and merge anything else from that
     userConfPath = mkxp_fs::normalizePath(std::string(customDataPath + "/" CONF_FILE).c_str(), 0, 1);
+    CONF_PROBE("conf: user conf path");
     json::value userConf = readConfFile(userConfPath.c_str());
+    CONF_PROBE("conf: user conf read");
     if (!userConf.is_object())
         userConf = json::object({});
     copyObject(optsJ, userConf);

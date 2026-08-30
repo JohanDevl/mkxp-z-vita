@@ -24,7 +24,11 @@ namespace fs = ghc::filesystem;
 // https://stackoverflow.com/questions/12774207/fastest-way-to-check-if-a-file-exist-using-standard-c-c11-c
 bool filesystemImpl::fileExists(const char *path) {
     fs::path stdPath(path);
-    return (fs::exists(stdPath) && !fs::is_directory(stdPath));
+    /* error_code overloads: the throwing ones raise filesystem_error for
+     * any stat failure that is not file-not-found, and several callers
+     * run outside any try block (uncaught -> abort, seen on Vita). */
+    std::error_code ec;
+    return (fs::exists(stdPath, ec) && !fs::is_directory(stdPath, ec));
 }
 
 
@@ -71,8 +75,12 @@ std::string filesystemImpl::getCurrentDirectory() {
 std::string filesystemImpl::normalizePath(const char *path, bool preferred, bool absolute) {
     fs::path stdPath(path);
     
-    if (!stdPath.is_absolute() && absolute)
-        stdPath = fs::current_path() / stdPath;
+    if (!stdPath.is_absolute() && absolute) {
+        std::error_code ec;
+        fs::path cwd = fs::current_path(ec);
+        if (!ec)
+            stdPath = cwd / stdPath;
+    }
 
     stdPath = stdPath.lexically_normal();
     std::string ret(stdPath);
