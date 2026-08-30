@@ -255,6 +255,13 @@ unsigned int _newlib_heap_size_user __attribute__((used)) = 96 * 1024 * 1024;
 int main(int argc, char *argv[]) {
     VITA_BOOTLOG("main: entered");
 #ifdef __vita__
+    /* SDL's PVR backend loads the GLES2 driver modules from
+     * VITA_MODULE_PATH (default app0:module). We do not bundle the PVR
+     * .suprx set (provenance, PRD D6/10.4); users install it here. */
+    if (!SDL_getenv("VITA_MODULE_PATH"))
+        SDL_setenv("VITA_MODULE_PATH", "ur0:data/external", 1);
+#endif
+#ifdef __vita__
     /* C++ unwinding self-test: if this aborts, every later throw would
      * terminate the process and nothing else is worth debugging. */
     try {
