@@ -19,6 +19,12 @@
  ** along with mkxp.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#ifdef __vita__
+/* Must precede every GLES include in this TU: the direct-link lookup
+ * table needs the extension prototypes. */
+#define GL_GLEXT_PROTOTYPES 1
+#endif
+
 #include "gl-fun.h"
 
 #include "boost-hash.h"
@@ -68,8 +74,28 @@ static void parseExtensionsCompat(_PFNGLGETSTRINGPROC GetString, BoostSet<std::s
     }
 }
 
+#ifdef __vita__
+#include "vita-gl-lookup.h"
+#include <string.h>
+/* eglGetProcAddress (behind SDL_GL_GetProcAddress) resolves only
+ * extensions on IMGEGL; core entry points come from the direct-linked
+ * weak stub table instead. */
+static void *mkxpVitaGLProc(const char *name)
+{
+    void *p = SDL_GL_GetProcAddress(name);
+    if (p)
+        return p;
+    for (size_t i = 0; i < sizeof(vitaGLTable) / sizeof(vitaGLTable[0]); i++)
+        if (!strcmp(vitaGLTable[i].name, name))
+            return vitaGLTable[i].fn;
+    return 0;
+}
+#define GL_FUN(name, type) \
+gl.name = (type) mkxpVitaGLProc("gl" #name EXT_SUFFIX);
+#else
 #define GL_FUN(name, type) \
 gl.name = (type) SDL_GL_GetProcAddress("gl" #name EXT_SUFFIX);
+#endif
 
 #define EXC(msg) \
 Exception(Exception::MKXPError, "%s", msg)

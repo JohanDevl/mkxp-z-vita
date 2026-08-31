@@ -68,6 +68,13 @@ gfx_backend = get_option('gfx_backend')
 if gfx_backend == 'gles'
     # Needs to be manually set up for now
     global_args += '-DGLES2_HEADER'
+    if host_system == 'vita'
+        # bring-up: taiHEN import hooks reroute driver logs to boot.log
+        global_dependencies += compilers['cpp'].find_library('taihen_stub_weak')
+        # direct-linked GLES2 core entry points (weak; bound when SDL
+        # loads libGLESv2.suprx) - eglGetProcAddress is extensions-only
+        global_dependencies += compilers['cpp'].find_library('libGLESv2_stub_weak')
+    endif
     # GLES2 on the Vita is provided at runtime by the PVR_PSP2 (Piglet)
     # driver through the pib wrapper. SDL2 must be built with
     # SDL_VIDEO_VITA_PIB (see platform/vita/build-deps.sh), and its

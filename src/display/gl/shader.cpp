@@ -204,6 +204,25 @@ void Shader::init(const unsigned char *vert, int vertSize,
 
 	GLint success;
 
+#ifdef __vita__
+	{
+		extern void vitaBootLog(const char *msg);
+		char b[128];
+		snprintf(b, sizeof(b), "shader: compiling %s / %s (%s)",
+		         vertName, fragName, programName);
+		vitaBootLog(b);
+	}
+	/* ShaccCg (the runtime GLSL compiler) hangs on the loop-heavy
+	 * scaler fragments. Alias them to the plain one: the fancy
+	 * smooth-scaling modes then behave like linear filtering, and
+	 * their extra uniforms resolve to -1 (harmless no-ops). */
+	if (!strcmp(fragName, "bicubic") || !strcmp(fragName, "lanczos3") ||
+	    !strcmp(fragName, "xbrz")) {
+		frag = ___shader_simple_frag;
+		fragSize = ___shader_simple_frag_len;
+	}
+#endif
+
 	/* Compile vertex shader */
 	setupShaderSource(vertShader, GL_VERTEX_SHADER, vert, vertSize);
 	gl.CompileShader(vertShader);

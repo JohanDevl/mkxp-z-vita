@@ -139,15 +139,30 @@ struct SharedStatePrivate
 			fclose(tmp);
 		}
 
+#ifdef __vita__
+		/* PhysFS cannot resolve the relative "." against newlib's cwd;
+		 * mount the game folder by its absolute device path. */
+		fileSystem.addPath(mkxp_fs::getCurrentDirectory().c_str());
+#else
 		fileSystem.addPath(".");
+#endif
 
 		for (size_t i = 0; i < config.rtps.size(); ++i)
 			fileSystem.addPath(config.rtps[i].c_str());
+#ifdef __vita__
+		{ extern void vitaBootLog(const char *); vitaBootLog("shstate: paths mounted, building path cache"); }
+#endif
 
 		if (config.pathCache)
 			fileSystem.createPathCache();
+#ifdef __vita__
+		{ extern void vitaBootLog(const char *); vitaBootLog("shstate: path cache done, scanning fonts"); }
+#endif
 
 		fileSystem.initFontSets(fontState);
+#ifdef __vita__
+		{ extern void vitaBootLog(const char *); vitaBootLog("shstate: fonts scanned, gl objects"); }
+#endif
 
 		globalTexW = 128;
 		globalTexH = 64;

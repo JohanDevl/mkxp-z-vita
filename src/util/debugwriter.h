@@ -63,6 +63,13 @@ public:
 	{
 #ifdef __ANDROID__
 		__android_log_write(ANDROID_LOG_DEBUG, "mkxp", buf.str().c_str());
+#elif defined(__vita__)
+		/* stderr goes nowhere on the Vita; keep the engine's entire
+		 * diagnostic stream in the bring-up log. */
+		{
+			extern void vitaBootLog(const char *msg);
+			vitaBootLog((std::string("mkxp: ") + buf.str()).c_str());
+		}
 #else
 		std::cerr << buf.str() << std::endl;
 #endif

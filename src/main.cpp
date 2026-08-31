@@ -53,6 +53,9 @@
 #include <sys/stat.h>
 #include <psp2/kernel/modulemgr.h>
 #include <psp2/sysmodule.h>
+#include <psp2/kernel/clib.h>
+#include <taihen.h>
+#include <stdarg.h>
 
 /* Bring-up breadcrumbs: appended to ux0:data/RPGPlayer/boot.log so a
  * hardware crash can be bisected without a debugger. If the file does
@@ -68,6 +71,39 @@ void vitaBootLog(const char *msg) {
     }
 }
 #define VITA_BOOTLOG(msg) vitaBootLog(msg)
+
+/* Bring-up: reroute the GPU driver modules' sceClibPrintf (their
+ * PVR_DPF error channel, otherwise invisible on retail) into
+ * boot.log via taiHEN import hooks. */
+static tai_hook_ref_t vitaClibHookRefs[12];
+static int vitaClibPrintfHook(const char *fmt, ...) {
+    char buf[512];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    size_t n = strlen(buf);
+    while (n && (buf[n - 1] == 0x0a || buf[n - 1] == 0x0d)) buf[--n] = 0;
+    /* Keep the signal: drop the driver's per-call verbose spam. */
+    if (n && !strstr(buf, "(Verbose)") && !strstr(buf, "GetProcAddress") &&
+        !strstr(buf, "TLS_Open") && !strstr(buf, "IMGeglGetError"))
+        vitaBootLog(buf);
+    return (int)n;
+}
+static void vitaHookDriverLogs(void) {
+    const char *mods[] = {"libGLESv2", "libIMGEGL", "libgpu_es4_ext",
+                          "libpvrPSP2_WSEGL", "libpvr2d", "SceShaccCg",
+                          "PSP2_PVR", "GLESv2", "IMGEGL"};
+    char lbuf[96];
+    for (size_t i = 0; i < sizeof(mods) / sizeof(mods[0]); i++) {
+        SceUID r = taiHookFunctionImport(&vitaClibHookRefs[i], mods[i],
+                                         0xCAE9ACE6 /* SceLibKernel */,
+                                         0xFA26BC62 /* sceClibPrintf */,
+                                         (const void *)vitaClibPrintfHook);
+        snprintf(lbuf, sizeof(lbuf), "hook %s -> 0x%08x", mods[i], (unsigned)r);
+        vitaBootLog(lbuf);
+    }
+}
 #else
 #define VITA_BOOTLOG(msg) ((void)0)
 #endif
@@ -261,6 +297,12 @@ static void setupWindowIcon(const Config &conf, SDL_Window *win) {
  * failing. 96 MiB tests that hypothesis; tune upward once the real
  * budget (PRD Q1) is measured. */
 unsigned int _newlib_heap_size_user __attribute__((used)) = 96 * 1024 * 1024;
+/* The PVR driver modules allocate through the SceLibc heap (vs0
+ * libc.suprx); its default is tiny and GLES2CreateGC's very first
+ * malloc fails without this (driver log: "Can't alloc memory for the
+ * gc"). */
+extern "C" unsigned int sceLibcHeapSize __attribute__((used)) ;
+unsigned int sceLibcHeapSize = 32 * 1024 * 1024;
 #endif
 
 int main(int argc, char *argv[]) {
@@ -597,6 +639,9 @@ int main(int argc, char *argv[]) {
 
     /* Start RGSS thread */
 #ifdef __vita__
+    vitaHookDriverLogs();
+#endif
+#ifdef __vita__
     /* SDL's Vita default thread stack is far too small for MRI, and the
      * Ruby port has no working guard pages - stack_check is the only
      * overflow detector, and it needs a real stack under it. */
@@ -675,12 +720,14 @@ static SDL_GLContext initGL(SDL_Window *win, Config &conf,
   if (conf.debugMode)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 
+  VITA_BOOTLOG("initGL: creating context");
   glCtx = SDL_GL_CreateContext(win);
 
   if (!glCtx) {
     GLINIT_SHOWERROR(std::string("Could not create OpenGL context: ") + SDL_GetError());
     return 0;
   }
+  VITA_BOOTLOG("initGL: context created");
 
   try {
     initGLFunctions();
@@ -690,6 +737,7 @@ static SDL_GLContext initGL(SDL_Window *win, Config &conf,
 
     return 0;
   }
+  VITA_BOOTLOG("initGL: functions loaded");
 
   if (!conf.enableBlitting)
     gl.BlitFramebuffer = 0;
@@ -697,8 +745,10 @@ static SDL_GLContext initGL(SDL_Window *win, Config &conf,
   gl.ClearColor(0, 0, 0, 1);
   gl.Clear(GL_COLOR_BUFFER_BIT);
   SDL_GL_SwapWindow(win);
+  VITA_BOOTLOG("initGL: first clear+swap done");
 
   printGLInfo();
+  VITA_BOOTLOG("initGL: glinfo printed");
 
   bool vsync = conf.vsync || conf.syncToRefreshrate;
   SDL_GL_SetSwapInterval(vsync ? 1 : 0);
